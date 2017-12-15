@@ -1,0 +1,46 @@
+#!/bin/bash
+#
+# generateBlockFiles
+#
+# For every distinct pair of gff3 files, A and B, in the data directory, this script
+# generates a file of synteny blocks. The block files are written to the data directory.
+# Each block file's name consists of the A and B file basenames, separated by a dash ("-"),
+# with a ".tsv" extension. So for example, if A and B are "mus_musculus_akrj.gff3"
+# and "mus_musculus_balbcj.gff3", respectively, the block file is named
+# "mus_musculus_akrj-mus_musculus_balbcj.tsv".
+#
+
+source config.sh
+
+# get the list of gff3 files
+declare -a arr=(`ls ${DIR}/data/*.gff3`)
+
+# 
+lim=$((${#arr[@]} - 1))
+
+# nested for loop, 
+#   for (i = 0; i < length of list; i++)
+#       for (j = i+1; j < length of list; j++)
+#           generate synteny blocks for file[i] and file[j]
+for i in `seq 0 ${lim}`; do
+    jstart=$(($i+1))
+    if [ ${jstart} -le ${lim} ]; then
+        for j in `seq $(($i+1)) ${lim}`; do
+            # files A and B (full paths)
+            a=${arr[$i]}
+            b=${arr[$j]}
+            # get their base names
+            afn=$(basename "${a}")
+            bfn=$(basename "${b}")
+            # remove extension
+            afn="${afn%.*}"
+            bfn="${bfn%.*}"
+            # construct the output file name
+            ofn="${afn}-${bfn}.tsv"
+            # here we go...
+            echo "python generate.py -A ${a} -B ${b} > ${DIR}/output/${ofn}"
+            python generate.py -A ${a} -B ${b} > ${DIR}/output/${ofn}
+        done
+    fi
+done    
+
