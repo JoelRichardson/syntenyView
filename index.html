@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://code.jquery.com/jquery-1.10.1.min.js"></script>
+<script src="http://code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
+<script src="http://www.mousemine.org/cdn/js/underscore.js/1.3.3/underscore-min.js"></script>
+<script src="http://www.mousemine.org/cdn/js/intermine/imjs/2.6.0/im.js"></script>
+<meta charset="utf-8">
+<style>
+
+#genesdiv {
+  max-height:200px;
+  overflow:scroll;
+  max-width:600px;
+  background-color:gray;
+}
+
+.overlay {
+ fill:none;
+ pointer-events: all;
+}
+
+li {
+    font-size : 10px;
+}
+
+.chrlabel {
+    text-anchor : middle;
+}
+
+.chrlabel:hover {
+    cursor : pointer;
+    fill : red;
+}
+
+.disclaimer {
+    font-size: 9px;
+}
+
+.help {
+    font-size: 9px;
+}
+
+svg {
+    background : #eee;
+}
+
+.chr {
+    fill : none;
+    stroke : black;
+}
+
+.fade {
+    fill-opacity : 0.07;
+}
+
+.brush .extent {
+ fill-opacity : 0.3;
+ stroke : none;
+ shape-rendering: crispEdges;
+}
+
+button {
+    font-size : 14px;
+}
+
+</style>
+
+</head>
+<body>
+<h3>Genome Rearrangement Viewer</h3>
+This demo displays mouse/human synteny blocks against either the mouse or human genome, 
+and allows the user to switch back and forth between views, zoom, select regions, and get data from MouseMine. 
+See <a href="#instructions">instructions</a> at the bottom of this page. 
+THIS IS A PROTOTYPE! (See <a href="#disclaimer">disclaimer</a>.)
+<p>
+Genome A: <select id="aGenome"></select>
+Genome B: <select id="bGenome"></select>
+<button id="go">GO</button>
+<p>
+<button id="bFlipGenome" onclick="flipGenome();" title="Displays chromosomes for this species. Click to change.">Genome:</button>
+<button id="bFlipColors" onclick="flipColors();" title="Colors each block by its chromosome in this species. Click to change.">Colors: </button>
+<button id="bSelections" onclick="clearSelections();" title="Un-hides chromosomes and un-selects region.">Clear selections</button>
+<button id="bResetView" onclick="resetView();" title="Restores initial viewpoint.">Reset View</button>
+<br/>
+<svg id="display"></svg>
+<br/>
+Max block size:
+<select id="maxBlkSize" onchange="setMaxBlockSize(parseInt(this.value))">
+    <option value="1000">1 kb</option>
+    <option value="10000">10 kb</option>
+    <option value="50000">50 kb</option>
+    <option value="100000">100 kb</option>
+    <option value="1000000">1 Mb</option>
+    <option value="10000000">10 Mb</option>
+    <option value="50000000">50 Mb</option>
+    <option value="100000000">100 Mb</option>
+    <option value="-1" selected>No maximum</option>
+</select>
+Min rectangle height:
+<select id="minRectHeight" onchange="setMinRectHeight(parseInt(this.value))">
+    <option value="0" selected>No minimum</option>
+    <option value="1">1 px</option>
+    <option value="2">2 px</option>
+    <option value="4">4 px</option>
+    <option value="8">8 px</option>
+</select>
+<p>
+<div id="genesdiv">
+<table id="genestbl" border="1"></table>
+</div>
+
+
+<a name="instructions"><h3>How to use this tool</h3></a>
+<ul>
+<li> To change which species' chromosomes are displayed, click the Genome button.  
+<li> To change which species' chromosomes are used to color the synteny blocks, click the Color button.
+<li> To view the blocks for specific chromosomes, click on the chromosome'labels.
+<li> To see the details (coordinates) for a synteny block, hover over it near its right or left side (not near the center).
+<li> To zoom in, double-click on the background. You should click near, but not on, the blocks you wish to zoom in on. Scroll wheels and touch gestures should also work.
+<li> To pan, drag on the background.
+<li> To restore the initial view, click "Reset View".
+<li> To see what genes are in a region, position the cursor over the chromosome (the cursor will change into a crosshair) and drag up or down.  Your region is drawn as a semi-transparent gray box. You can slide this box up and down, and you can adjust either end. As you do so, MouseMine is queried for the genes in that region AS WELL AS the genes in the corresponding syntenic regions of the other species. These are simply displayed as plain text symbols, just as a proof of concept.
+<li> To actually go to MouseMine and get those genes, click the "To MouseMine" button. Opens in a new window.
+</ul>
+
+<a name="disclaimer"><h3>Disclaimer</h3></a>
+
+<div class="disclaimer">
+This is a prototype, a proof of concept, a learning vehicle.
+The main focus was on teaching myself <a href="http://d3js.org/">d3.js</a>
+and <a href="https://github.com/intermine/imjs">im.js</a>.
+(D3 is a JavaScript library for creating dynamic visualizations, and im.js is
+a JavaScript client API for InterMine.)
+The actual tool happens to do something useful and even fun.
+But the code underneath (and here I'm referring to my code, not d3 or imjs) is the worst kind of horrible hackery.
+It is completely unmaintainable and nonextensible.
+You have been warned.
+</div>
+
+
+<script src="viewer.js"></script>
+
+</body>
+</html>
+

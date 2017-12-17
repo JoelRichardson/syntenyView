@@ -12,8 +12,15 @@
 
 source config.sh
 
+datadir=${DIR}/data
+outdir=${DIR}/output
+
 # get the list of gff3 files
-declare -a arr=(`ls ${DIR}/data/*.gff3`)
+declare -a arr=(`ls ${datadir}/*.gff3`)
+
+#
+slist="${outdir}/strainList.tsv"
+echo "strain" > ${slist}
 
 # 
 lim=$((${#arr[@]} - 1))
@@ -23,23 +30,23 @@ lim=$((${#arr[@]} - 1))
 #       for (j = i+1; j < length of list; j++)
 #           generate synteny blocks for file[i] and file[j]
 for i in `seq 0 ${lim}`; do
-    jstart=$(($i+1))
+    # extract the A strain name
+    a=${arr[$i]}
+    afn=$(basename "${a}")
+    afn="${afn%.*}"
+    jstart=$(($i))
+    echo "${afn}" >> "${slist}"
     if [ ${jstart} -le ${lim} ]; then
-        for j in `seq $(($i+1)) ${lim}`; do
-            # files A and B (full paths)
-            a=${arr[$i]}
+        for j in `seq ${jstart} ${lim}`; do
+            # extract the B strain name
             b=${arr[$j]}
-            # get their base names
-            afn=$(basename "${a}")
             bfn=$(basename "${b}")
-            # remove extension
-            afn="${afn%.*}"
             bfn="${bfn%.*}"
-            # construct the output file name
+            # construct the block file name
             ofn="${afn}-${bfn}.tsv"
             # here we go...
-            echo "python generate.py -A ${a} -B ${b} > ${DIR}/output/${ofn}"
-            python generate.py -A ${a} -B ${b} > ${DIR}/output/${ofn}
+            echo "python generate.py -A ${a} -B ${b} > ${outdir}/${ofn}"
+            python generate.py -A ${a} -B ${b} > ${outdir}/${ofn}
         done
     fi
 done    

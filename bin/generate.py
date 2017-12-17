@@ -2,7 +2,7 @@
 # generate.py
 #
 # Given two sets of features, one from genome A and one from genome B,
-# and a file of a/b feature ID pairs defining corrospondence between features in A and B,
+# and a file of a/b feature pairs defining corrospondence between features in A and B,
 # generates synteny blocks between genome A and genome B via interpolation.
 #
 # 
@@ -37,7 +37,7 @@ class SyntenyBlockGenerator:
         self.aid2feat = self.prepGff(self.A, self.a2b)
         self.bid2feat = self.prepGff(self.B, self.b2a)
         self.join()
-        self.writePairs()
+        if self.args.debug: self.writePairs()
         self.generateBlocks()
         self.writeBlocks()
 
@@ -65,6 +65,13 @@ class SyntenyBlockGenerator:
             dest="fileAB",
             metavar='FILE', 
             help='Tab delimited, 2-column file of A/B id pairs. These pairs define correspondence between features in AFEATURES and BFEATURES. If no -AB is provided, then features correspond if they have the same ID.')
+
+        self.parser.add_argument(
+            '-d',
+            dest="debug",
+            action="store_true",
+            default=False,
+            help='Debug mode.')
 
     def parseArgs (self) :
         """
@@ -174,10 +181,13 @@ class SyntenyBlockGenerator:
         # Hack: Assume any genes that have a "." strand are actually "+".
         # REMEMBER TO REMOVE ME!
         #
-        for f in feats:
-            if f.strand == ".":
-                f.strand = "+"
+        #for f in feats:
+        #    if f.strand == ".":
+        #        f.strand = "+"
         # end HACK
+        #
+        # UPDATE: generated gff3 files by another means and so ducked the issue.
+        # The issue still exists tho. Leaving this here as a reminder.
         ############################################################################
 
         # d. Number the features, 1, 2, 3... and project just the bits we need
@@ -301,29 +311,52 @@ class SyntenyBlockGenerator:
         for p in self.pairs:
             a = p['a']
             b = p['b']
-            r = [ a['index'], b['index'], a['ID'], a['chr'], a['start'], a['end'], b['ID'], b['chr'], b['start'], b['end'] ]
+            r = [ a['index'], b['index'], a['ID'], a['chr'], a['start'], a['end'], a['strand'], b['ID'], b['chr'], b['start'], b['end'], b['strand'] ]
             sys.stdout.write('# ' + '\t'.join([ str(x) for x in r ]) + '\n')
 
     def writeBlocks(self):
         """
         Writes the blocks to stdout.
         """
+        b = [
+              "blockId",
+              "blockCount",
+              "blockOri",
+              "blockRatio",
+              "aChr",
+              "bChr",
+              "aStart",
+              "bStart",
+              "aEnd",
+              "bEnd",
+              "aLength",
+              "bLength",
+              "aIndex",
+              "bIndex",
+            ]
+        sys.stdout.write( '\t'.join(map(lambda x:str(x),b)) + '\n' )
         for block in self.blocks:
             blkid, ori, blkcount, fields = block
-            b = [
+            alen = fields['a']['end']-fields['a']['start']+1
+            blen = fields['b']['end']-fields['b']['start']+1
+            blkRatio = (1.0 * min(alen,blen)) / max(alen,blen);
+            r = [
               blkid,
               blkcount,
               (ori==1 and "+" or "-"),
+              "%1.2f"%blkRatio,
+              fields['a']['chr'],
+              fields['b']['chr'],
+              fields['a']['start'],
+              fields['b']['start'],
+              fields['a']['end'],
+              fields['b']['end'],
+              fields['a']['end']-fields['a']['start']+1,
+              fields['b']['end']-fields['b']['start']+1,
               fields['a']['index'],
               fields['b']['index'] - (blkcount-1 if ori == 1 else 0),
-              fields['a']['chr'],
-              fields['a']['start'],
-              fields['a']['end'],
-              fields['b']['chr'],
-              fields['b']['start'],
-              fields['b']['end'],
             ]
-            sys.stdout.write( '\t'.join(map(lambda x:str(x),b)) + '\n' )
+            sys.stdout.write( '\t'.join(map(lambda x:str(x),r)) + '\n' )
 
 #
 def main () :
