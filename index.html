@@ -7,66 +7,7 @@
 <script src="http://www.mousemine.org/cdn/js/underscore.js/1.3.3/underscore-min.js"></script>
 <script src="http://www.mousemine.org/cdn/js/intermine/imjs/2.6.0/im.js"></script>
 <meta charset="utf-8">
-<style>
-
-#genesdiv {
-  max-height:200px;
-  overflow:scroll;
-  max-width:600px;
-  background-color:gray;
-}
-
-.overlay {
- fill:none;
- pointer-events: all;
-}
-
-li {
-    font-size : 10px;
-}
-
-.chrlabel {
-    text-anchor : middle;
-}
-
-.chrlabel:hover {
-    cursor : pointer;
-    fill : red;
-}
-
-.disclaimer {
-    font-size: 9px;
-}
-
-.help {
-    font-size: 9px;
-}
-
-svg {
-    background : #eee;
-}
-
-.chr {
-    fill : none;
-    stroke : black;
-}
-
-.fade {
-    fill-opacity : 0.07;
-}
-
-.brush .extent {
- fill-opacity : 0.3;
- stroke : none;
- shape-rendering: crispEdges;
-}
-
-button {
-    font-size : 14px;
-}
-
-</style>
-
+<link type="text/css" rel="stylesheet" href="./style.css">
 </head>
 <body>
 <h3>Genome Rearrangement Viewer</h3>
@@ -77,7 +18,6 @@ THIS IS A PROTOTYPE! (See <a href="#disclaimer">disclaimer</a>.)
 <p>
 Genome A: <select id="aGenome"></select>
 Genome B: <select id="bGenome"></select>
-<button id="go">GO</button>
 <p>
 <button id="bFlipGenome" onclick="flipGenome();" title="Displays chromosomes for this species. Click to change.">Genome:</button>
 <button id="bFlipColors" onclick="flipColors();" title="Colors each block by its chromosome in this species. Click to change.">Colors: </button>
@@ -86,26 +26,59 @@ Genome B: <select id="bGenome"></select>
 <br/>
 <svg id="display"></svg>
 <br/>
-Max block size:
-<select id="maxBlkSize" onchange="setMaxBlockSize(parseInt(this.value))">
-    <option value="1000">1 kb</option>
-    <option value="10000">10 kb</option>
-    <option value="50000">50 kb</option>
-    <option value="100000">100 kb</option>
-    <option value="1000000">1 Mb</option>
-    <option value="10000000">10 Mb</option>
-    <option value="50000000">50 Mb</option>
-    <option value="100000000">100 Mb</option>
-    <option value="-1" selected>No maximum</option>
-</select>
-Min rectangle height:
-<select id="minRectHeight" onchange="setMinRectHeight(parseInt(this.value))">
-    <option value="0" selected>No minimum</option>
-    <option value="1">1 px</option>
-    <option value="2">2 px</option>
-    <option value="4">4 px</option>
-    <option value="8">8 px</option>
-</select>
+
+<div id="showFacets">
+    <span class="label">Show</span>
+    <div class="fieldgroup">
+        <!-- Inversions -->
+        <div name="inversions" class="labelledInput">
+            <input type="checkbox" value="inversions" />
+            <span class="label">Inversions</span>
+        </div>
+        <!-- Translocations -->
+        <div name="translocations" class="labelledInput">
+            <input type="checkbox" value="translocations" />
+            <span class="label">Translocations</span>
+        </div>
+        <!-- Deletions -->
+        <div name="deletions" class="labelledInput disabled">
+            <input disabled type="checkbox" value="deletions" />
+            <span class="label">Deletions</span>
+        </div>
+        <!-- Inflation threshold -->
+        <div name="inflation" class="labelledInput">
+            <input type="checkbox" value="inflation" />
+            <span class="label">Inflation &gt;</span>
+            <input size=3 type="text" value="1.1" />
+        </div>
+        <!-- Max block size -->
+        <div name="maxBlockSize" class="labelledInput" >
+            <input type="checkbox" value="maxBlockSize" />
+            <span class="label">Max block size</span>
+            <select 
+                <option value="1000">1 kb</option>
+                <option value="10000">10 kb</option>
+                <option value="50000">50 kb</option>
+                <option value="100000">100 kb</option>
+                <option value="1000000" selected>1 Mb</option>
+                <option value="10000000">10 Mb</option>
+                <option value="50000000">50 Mb</option>
+                <option value="100000000">100 Mb</option>
+            </select>
+        </div>
+    </div>
+</div>
+<div name="minRectHeight" class="labelledInput">
+    <span class="label">Min rectangle height</span>
+    <select>
+        <option value="0">No limit</option>
+        <option value="1" selected>1 px</option>
+        <option value="2">2 px</option>
+        <option value="4">4 px</option>
+        <option value="8">8 px</option>
+    </select>
+</div>
+
 <p>
 <div id="genesdiv">
 <table id="genestbl" border="1"></table>
@@ -141,6 +114,14 @@ You have been warned.
 
 
 <script src="viewer.js"></script>
+
+<form name="mgiLinkForm" action="http://www.informatics.jax.org/batch/summary" method="POST" target="_blank">
+    <input type="hidden" name="ids" value="" />
+</form>
+<form name="mmLinkForm" action="http://www.mousemine.org/mousemine/portal.do" method="POST" target="_blank">
+    <input type="hidden" name="externalids" value="" />
+    <input type="hidden" name="class" value="Gene" />
+</form>
 
 </body>
 </html>

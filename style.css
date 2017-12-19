@@ -1,0 +1,61 @@
+
+#genesdiv {
+  max-height:200px;
+  overflow:scroll;
+  max-width:600px;
+  background-color:gray;
+}
+
+.overlay {
+ fill:none;
+ pointer-events: all;
+}
+
+li {
+    font-size : 10px;
+}
+
+.chrlabel {
+    text-anchor : middle;
+}
+
+.chrlabel:hover {
+    cursor : pointer;
+    fill : red;
+}
+
+.disclaimer {
+    font-size: 9px;
+}
+
+.help {
+    font-size: 9px;
+}
+
+svg {
+    background : #eee;
+}
+
+.chr {
+    fill : none;
+    stroke : black;
+}
+
+.fade {
+    fill-opacity : 0.07;
+}
+
+button {
+    font-size : 14px;
+}
+
+rect.sblock {
+    cursor: pointer;
+}
+/* ========================== */
+.disabled {
+    color : #ccc;
+}
+.fieldgroup {
+    border: thin solid #ccc;
+}

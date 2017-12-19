@@ -24,6 +24,17 @@ class SyntenyBlockGenerator:
         #
         self.nBlocks = 0 # number of synteny blocks created.
         #
+        # Create a special object to serve as the "missing" side of an insertion/deletion block.
+        #
+        self.INSERTED = {
+            'index' : -1,
+            'ID' : '',
+            'chr': '',
+            'start': 0,
+            'end' : 0,
+            'strand' : '.',
+        }
+
         self.initArgParser()
 
     def go (self):
@@ -148,7 +159,7 @@ class SyntenyBlockGenerator:
         """
         # a. Filter for features whose ID is in the index
         n = len(feats)
-        feats[:] = filter(lambda f: f.ID in index, feats)
+        #feats[:] = filter(lambda f: f.ID in index, feats)
         dn_a = n - len(feats)
 
         # b. Sort by chr+start position.
@@ -217,9 +228,11 @@ class SyntenyBlockGenerator:
         numbering sequence.
         """
         def _renumber(which):
-            self.pairs.sort(lambda x,y: cmp(x[which]['index'], y[which]['index']))
+            self.pairs.sort(
+              lambda x,y: 1 if x[which] is self.INSERTED else -1 if y[which] is self.INSERTED else cmp(x[which]['index'], y[which]['index']))
             for i,p in enumerate(self.pairs): 
-                p[which]['index'] = i
+                if p[which]:
+                    p[which]['index'] = i
         #
         _renumber('b')
         _renumber('a')
@@ -230,18 +243,34 @@ class SyntenyBlockGenerator:
         """
         Joins the features in A to their corresponding features in B.
         Generates a list of feature pairs. 
+        Update: add pairs that contain just an A or just a B (to deal with
+        insertions/deletions).
         """
         self.pairs = []
         for a in self.A:
             aid = a['ID']
-            bid = self.a2b[aid][0]
-            b = self.bid2feat.get(bid, None)
-            if b is None: continue
+            bid = self.a2b.get(aid,[None])[0]
+            b = self.bid2feat.get(bid, self.INSERTED)
+            #
+            if b is self.INSERTED: continue
+            # 
             pair = {
               'a': a,
               'b': b
               }
             self.pairs.append(pair)
+        #
+        '''
+        for b in self.B:
+            bid = b['ID']
+            if not bid in self.b2a:
+                # b outer join row
+                pair = {
+                    'a': self.INSERTED,
+                    'b': b
+                }
+        '''
+
         # the join step may cause genes to drop out, and it is important that the
         # sequence is unbroken for each genome
         self.renumber()
@@ -259,24 +288,38 @@ class SyntenyBlockGenerator:
            Each feature (-like object) is used to record the chromosome, start, and end of the syntenic
            region in its genome.
         """
-        ori = (pair['a']['strand'] == pair['b']['strand']) and +1 or -1
         self.nBlocks += 1
         blockId = self.nBlocks
         blockCount = 1
-        return [ blockId, ori, blockCount, pair.copy() ]
+        ori = +1
+        if pair['a'] is self.INSERTED:
+            ids = set([pair['b']['ID']])
+            pcopy = { 'a':self.INSERTED, 'b': pair['b'].copy() }
+        elif pair['b'] is self.INSERTED:
+            ids = set([pair['a']['ID']])
+            pcopy = { 'b':self.INSERTED, 'a': pair['a'].copy() }
+        else:
+            ori = +1 if (pair['a']['strand'] == pair['b']['strand']) else -1
+            ids = set([pair['a']['ID'], pair['b']['ID']])
+            pcopy = pair.copy()
+        return [ blockId, ori, blockCount, pcopy, ids ]
 
     def extendBlock(self,currPair,currBlock):
         """
         Extends the given synteny block to include the coordinate
         ranges of the given pair.
         """
-        bname,ori,blockCount,pair = currBlock
+        bname,ori,blockCount,pair,ids = currBlock
         currBlock[2] = blockCount+1
-        pair['a']['start'] = min(pair['a']['start'], currPair['a']['start'])
-        pair['a']['end']   = max(pair['a']['end'],   currPair['a']['end'])
-        pair['b']['start'] = min(pair['b']['start'], currPair['b']['start'])
-        pair['b']['end']   = max(pair['b']['end'],   currPair['b']['end'])
-        pair['b']['index'] = currPair['b']['index']
+        if pair['a'] is not self.INSERTED:
+            pair['a']['start'] = min(pair['a']['start'], currPair['a']['start'])
+            pair['a']['end']   = max(pair['a']['end'],   currPair['a']['end'])
+            ids.add(currPair['a']['ID'])
+        if pair['b'] is not self.INSERTED:
+            pair['b']['start'] = min(pair['b']['start'], currPair['b']['start'])
+            pair['b']['end']   = max(pair['b']['end'],   currPair['b']['end'])
+            pair['b']['index'] = currPair['b']['index']
+            ids.add(currPair['b']['ID'])
 
     def canMerge(self,currPair,currBlock):
         """
@@ -285,13 +328,16 @@ class SyntenyBlockGenerator:
         """
         if currBlock is None:
                     return False
-        bid,ori,bcount,cbfields = currBlock
-        cori = (currPair['a']['strand']==currPair['b']['strand']) and 1 or -1
+        bid,ori,bcount,pair,ids = currBlock
+        if currPair['a'] is self.INSERTED or currPair['b'] is self.INSERTED:
+            cori = +1
+        else:
+            cori = 1 if (currPair['a']['strand']==currPair['b']['strand']) else -1
         return \
-            currPair['a']['chr'] == cbfields['a']['chr'] \
-            and currPair['b']['chr'] == cbfields['b']['chr'] \
+            currPair['a']['chr'] == pair['a']['chr'] \
+            and currPair['b']['chr'] == pair['b']['chr'] \
             and ori == cori \
-            and currPair['b']['index'] == cbfields['b']['index']+ori
+            and (currPair['b'] is self.INSERTED or currPair['b']['index'] == pair['b']['index']+ori)
 
     def generateBlocks (self) :
         """
@@ -325,18 +371,19 @@ class SyntenyBlockGenerator:
               "blockRatio",
               "aChr",
               "bChr",
+              "aLength",
+              "bLength",
               "aStart",
               "bStart",
               "aEnd",
               "bEnd",
-              "aLength",
-              "bLength",
               "aIndex",
               "bIndex",
+              "ids",
             ]
         sys.stdout.write( '\t'.join(map(lambda x:str(x),b)) + '\n' )
         for block in self.blocks:
-            blkid, ori, blkcount, fields = block
+            blkid, ori, blkcount, fields, ids = block
             alen = fields['a']['end']-fields['a']['start']+1
             blen = fields['b']['end']-fields['b']['start']+1
             blkRatio = (1.0 * min(alen,blen)) / max(alen,blen);
@@ -347,14 +394,15 @@ class SyntenyBlockGenerator:
               "%1.2f"%blkRatio,
               fields['a']['chr'],
               fields['b']['chr'],
+              fields['a']['end']-fields['a']['start']+1,
+              fields['b']['end']-fields['b']['start']+1,
               fields['a']['start'],
               fields['b']['start'],
               fields['a']['end'],
               fields['b']['end'],
-              fields['a']['end']-fields['a']['start']+1,
-              fields['b']['end']-fields['b']['start']+1,
               fields['a']['index'],
               fields['b']['index'] - (blkcount-1 if ori == 1 else 0),
+              ','.join(ids),
             ]
             sys.stdout.write( '\t'.join(map(lambda x:str(x),r)) + '\n' )
 

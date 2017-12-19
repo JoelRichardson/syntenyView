@@ -8,9 +8,33 @@ var width = outerWidth - margin.left - margin.right;
 var height = outerHeight - margin.top - margin.bottom;
 var zoomer = d3.behavior.zoom().on("zoom", zoom);
 var labels = null;
-var maxBlockSize = -1; // Max size in bp of synteny blocks to draw. -1 for unlimited
-var minRectHeight = 0; // Min size in px for drawing a block. 0 for no minimum
+
+var aName = null; // A genome name
+var bName = null; // B genome name
+
+var aSelected = []; // currently selected A chrs
+var bSelected = []; // currently selected B chrs
+
+var allBlocks = []; // the synteny blocks
+
+var minRectHeight = 2; // Min size in px for drawing a block. 0 for no minimum
 var magnification = 1.0;
+var maxBlockSize = 1000000; // Max size in bp of synteny blocks to draw.
+var inflationThreshold = 1.1; // only show blocks whose inflation is >= this value (1 == show everything)
+
+var facets = []; // empty to show all
+var facetFuncs = {
+    "inversions" : function (blk) { return blk.ori === "-" },
+    "translocations" : function (blk) { return blk.aChr !== blk.bChr },
+    "deletions" : function (blk) { return blk.aChr === null || blk.bChr === null; },
+    "inflation" : function (blk) { return blk.inflation >= inflationThreshold },
+    "maxBlockSize" : function (blk) { return blk.bLength <= maxBlockSize }
+};
+
+var cwidth = 20;
+var dur = 1500;
+var bwidth = cwidth/2;
+
 var yViewSize = null;
 var svg = d3.select("#display")
 	.attr("width", outerWidth)
@@ -30,6 +54,76 @@ var text =  d3.select("#display")
 	    .attr("y", outerHeight-10)
 	    .attr("fill", "black")
 	;
+
+// ------------------------------
+d3.select("#showFacets")
+    .selectAll('input[type="checkbox"')
+    .on("change", setShowFacets);
+
+function setShowFacets () {
+    facets = [];
+    var cbs = d3.select("#showFacets")
+        .selectAll('input[type="checkbox"')
+        .each( function () {
+            this.checked && facets.push(this.value) 
+        });
+    redraw();
+}
+
+// ------------------------------
+d3.select('[name="maxBlockSize"].labelledInput select')
+    .on("change", function () { setMaxBlockSize(this.value) });
+
+function setMaxBlockSize(n) {
+    maxBlockSize = +n;
+    redraw();
+}
+
+// ------------------------------
+d3.select('[name="minRectHeight"].labelledInput select')
+    .on("change", function () { setMinRectHeight(this.value) });
+
+function setMinRectHeight(n) {
+    minRectHeight = +n;
+    redraw();
+}
+
+// ------------------------------
+d3.select('[name="inflation"].labelledInput input[type="text"]')
+    .on("change", function () { setInflationThreshold(this.value) });
+
+function setInflationThreshold(t) {
+    inflationThreshold = +t;
+    redraw();
+}
+
+// ---------------------------------------------
+// ---------------------------------------------
+//
+function name2text(n){
+    if (n.startsWith('mus_musculus_')) {
+        return n.replace('mus_musculus_', '');
+    }
+    else if (n.startsWith('mus_spretus_')) {
+        return n.replace('mus_spretus_', '');
+    }
+    else
+        return n.replace('mus_', 'mus ')
+}
+d3tsv("./output/strainList.tsv").then(function(strains) {
+    let s1 = initOptList("#aGenome", strains, s=>s.strain, s=>name2text(s.strain))
+    let s2 = initOptList("#bGenome", strains, s=>s.strain, s=>name2text(s.strain))
+    s1.on("change", function () {
+        let s2strs = strains.slice(s1.node().selectedIndex);
+        initOptList("#bGenome", s2strs, s=>s.strain, s=>name2text(s.strain));
+        s2.node().selectedIndex = s2strs.length > 1 ? 1 : 0;
+        go();
+    });
+    s2.on("change", go);
+    s1[0][0].selectedIndex = 0;
+    s2[0][0].selectedIndex = 3;
+    go();
+});
 
 // ---------------------------------------------
 // Initialize the strain selection lists. 
@@ -70,25 +164,18 @@ function d3tsv(url) {
     }); 
 }
 
-d3tsv("./output/strainList.tsv").then(function(strains) {
-    let s1 = initOptList("#aGenome", strains, s=>s.strain)
-    let s2 = initOptList("#bGenome", strains, s=>s.strain)
-    d3.select("#go")
-        .on("click", go);
-});
-
 function go () {
-    let s1 = d3.select("#aGenome")[0][0].value;
-    let s2 = d3.select("#bGenome")[0][0].value;
-    console.log("GO!", s1, s2);
+    aName = d3.select("#aGenome")[0][0].value;
+    bName = d3.select("#bGenome")[0][0].value;
+    console.log("GO!", aName, bName);
     let makefn = (a,b) => `./output/${a}-${b}.tsv`;
     Promise.all([
-        d3tsv(makefn(s1,s1)),
-        d3tsv(makefn(s2,s2)),
-        d3tsv(makefn(s1,s2))
+        d3tsv(makefn(aName,aName)),
+        d3tsv(makefn(bName,bName)),
+        d3tsv(makefn(aName,bName))
     ]).then(function(data) {
-        let aChrs = data[0].map(c => [ c.aChr, c.aLength, s1 ]);
-        let bChrs = data[1].map(c => [ c.bChr, c.bLength, s2 ]);
+        let aChrs = data[0].map(c => [ c.aChr, c.aLength, aName ]);
+        let bChrs = data[1].map(c => [ c.bChr, c.bLength, bName ]);
         let abBlks = data[2];
         let allChrs = aChrs.concat(bChrs).sort((a,b) => {
             let ca = a[0];
@@ -106,33 +193,29 @@ function go () {
           bks.push({
             name   : ""+k.blockId,
             ori    : k.blockOri,
-            mchr   : k.aChr,
-            mstart : k.aStart,
-            mend   : k.aEnd,
-            hchr   : k.bChr,
-            hstart : k.bStart,
-            hend   : k.bEnd,
+            aChr   : k.aChr,
+            aStart : k.aStart,
+            aEnd   : k.aEnd,
+            aLength: k.aLength,
+            bChr   : k.bChr,
+            bStart : k.bStart,
+            bEnd   : k.bEnd,
+            bLength: k.bLength,
+            ids    : k.ids.split(','),
+            inflation : 1 / k.blockRatio,
             map    : d3.scale.linear().clamp(true)
           });
         });
-        window.sblocks = bks;
+        allBlocks = bks;
+        aSelected = [];
+        bSelected = [];
         processChrs( allChrs );
     });
 }
 
-function setMaxBlockSize(n) {
-    maxBlockSize = n;
-    redraw();
-}
-
-function setMinRectHeight(n) {
-    minRectHeight = n;
-    redraw();
-}
-
 // ---------------------------------------------
 
-function setText(scale){
+function setZoomLabel(scale){
   if(!arguments.length)
       scale = d3.event.scale;
   var ys = yscale.range();
@@ -144,13 +227,16 @@ function setText(scale){
 function zoom() {
   svg.attr("transform", "translate(" + d3.event.translate + ")scale(" + d3.event.scale + ")");
   magnification = d3.event.scale;
-  setText();
+  setZoomLabel();
+  drawBlocks();
 }
 
 function resetView(){
   zoomer.scale(1).translate([0,0]);
   svg.attr("transform", "translate(0,0)scale(1)");
-  setText(1);
+  magnification = 1;
+  setZoomLabel(1);
+  drawBlocks();
 }
 
 function processChrs(data) { 
@@ -208,15 +294,13 @@ function processChrs(data) {
 	spd.cscale = d3.scale.category20c().domain(spd.chrs.map(function(x){return x.id;}));
 	spd.chrs.forEach(function(c){
 	    var sc = d3.scale.linear().domain([1,c.length]).range([0, window.yscale(c.length)]);
-	    c.brush = d3.svg.brush().y(sc)
-	      .on("brushstart",brushstart)
-	      .on("brushend",brushend)
-	      ;
 	  });
 	window.species.push(spd);
     });
 
     window.colors = window.species[0].cscale;
+
+    d3.selectAll('a.sblock').remove();
 
     redraw();
 }
@@ -238,19 +322,42 @@ function setTitle(bspecies, cspecies) {
 
 }
 
+let mgiUrlBase = "http://www.informatics.jax.org/batch/summary";
+let mmUrlBase  = "http://www.mousemine.org/mousemine/portal.do?class=Gene&externalids=";
+
+function blockClicked () {
+    let alt = d3.event.altKey;
+    let b = d3.select(this);
+    let ids = b.data()[0].ids;
+    //
+    let formName = alt ? 'mmLinkForm' : 'mgiLinkForm';
+    let inpName  = alt ? 'externalids' : 'ids';
+    let joinChar = alt ? ',' : ' ';
+    let form = d3.select(`form[name="${formName}"]`);
+    let input = form.select(`input[name="${inpName}"]`);
+    input[0][0].value = ids.join(joinChar);
+    //
+    form[0][0].enctype = alt ? '' : 'multipart/form-data';
+    form[0][0].submit()
+}
+
 function redraw () {
     drawChrs( species[spIndex], species[cIndex], window.colors);
 }
 
+function drawBlocks(){
+    let s= 'a';
+    d3.selectAll('a.sblock rect')
+        .attr("height", function(d){
+             return Math.max(minRectHeight/magnification, window.yscale(d[s+'End']-d[s+'Start']+1));
+        })
+}
+
 function drawChrs(spd, spd2, colors){
     var ccells;
-    var brushes;
     var slabel = null;
     //var labels;
     var blks;
-    var cwidth = 20;
-    var dur = 1500;
-    var bwidth = cwidth/2;
     var xf = function(d){return bwidth+spd.xscale(d.id);};
     var s,s2;
 
@@ -298,11 +405,18 @@ function drawChrs(spd, spd2, colors){
 
     // Synteny blocks
     //
-    s = ["m", "h"][spIndex];
-    s2 = ["m","h"][cIndex];
-    let blocksToDraw =
-        maxBlockSize === -1 ? window.sblocks
-            : window.sblocks.filter(b => b.hend - b.hstart+1 <= maxBlockSize);
+    s  = ["a","b"][spIndex];
+    s2 = ["a","b"][cIndex];
+    let blocksToDraw = allBlocks;
+    if(facets.length > 0){
+        blocksToDraw = blocksToDraw.filter(function(b) {
+            let vals = facets.map( f => facetFuncs[f](b) );
+            let v = vals.reduce( (acc,cv) => acc && cv, true );
+            return v;
+        });
+    }
+
+    //
     blks = svg.selectAll('a.sblock')
       .data(blocksToDraw, function(x){return x.name;});
     blks.enter()
@@ -311,49 +425,32 @@ function drawChrs(spd, spd2, colors){
        .attr('target','_blank')
          .append('rect')
 	 .attr('class', 'sblock')
+         .on("click", blockClicked)
            .append('title')    
 	   ;
 
     blks.exit().remove();
 
     blks.select('title').text(function(d,i){
-         return d.ori + ' A'+fmtLoc(d.mchr,d.mstart,d.mend)+' B'+fmtLoc(d.hchr,d.hstart,d.hend);
+         return `A=${fmtLoc(d.aChr,d.aStart,d.aEnd)}(${formatLength(d.aLength)}) B=${fmtLoc(d.bChr,d.bStart,d.bEnd)}(${formatLength(d.bLength)})`;
      })
     blks.select('rect')
      .classed("inverted", x => x.ori == "-")
+     .attr("fill", function(d){ return colors(d[s2+'Chr']); })
      .transition().duration(dur)
-     .attr("x", function(d){return spd.xscale(d[s+'chr']) + (d.ori=="+"?bwidth:0);})
-     .attr("y", function(d){return window.yscale(d[s+'start']);})
+     .attr("x", function(d){return spd.xscale(d[s+'Chr']) + (d.ori=="+"?bwidth:0);})
+     .attr("y", function(d){return window.yscale(d[s+'Start']);})
      .attr("width",bwidth) 
      .attr("height", function(d){
-         return Math.max(minRectHeight/magnification, window.yscale(d[s+'end']-d[s+'start']+1));
+         return Math.max(minRectHeight/magnification, window.yscale(d[s+'End']-d[s+'Start']+1));
      })
-     .attr("fill", function(d){ return colors(d[s2+'chr']); })
      ;
     blks.each(function(d){
-     var s = spd.species[0].toLowerCase();
-     var s2= spd2.species[0].toLowerCase();
-     d.map.domain([d[s+'start'],d[s+'end']]);
-     d.map.range(d.ori=='+'?[d[s2+'start'],d[s2+'end']]:[d[s2+'end'],d[s2+'start']]);
+     var s = spd.species === aName ? "a" : "b";
+     var s2= spd2.species === aName ? "a" : "b";
+     d.map.domain([d[s+'Start'],d[s+'End']]);
+     d.map.range(d.ori=='+'?[d[s2+'Start'],d[s2+'End']]:[d[s2+'End'],d[s2+'Start']]);
      });
-
-    /*
-    // Brushes
-    //
-    brushes = svg.selectAll("g.brush").data(spd.chrs, function(x){return x.id;});
-    brushes.exit().remove();
-    brushes.enter().append('g').attr('class','brush')
-        .each(function(d){d3.select(this).call(d.brush);})
-	.selectAll('rect')
-	 .attr('width',10)
-	 .attr('x', cwidth/4)
-	 ;
-    brushes
-        .attr('transform', function(d){return 'translate('+spd.xscale(d.id)+')';})
-        .each(function(d){d3.select(this).call(d.brush);})
-	;
-        */
-
 }
 
 function fmtLoc(c,s,e){
@@ -362,137 +459,39 @@ function fmtLoc(c,s,e){
     return (s<=e ? c+":"+s+".."+e : c+":"+e+".."+s);
 }
 
-function brushstart(c){
-    clearBrushes(c.brush);
-    d3.event.sourceEvent.stopPropagation();
-}
-
-function brushend(c){
-    if(c.brush.empty()) return;
-    var s = c.species[0].toLowerCase();
-    var s2 = (s=='m'?'h':'m');
-    var s2n = s2=='m'?'M. musculus' : 'H. sapiens';
-    var xtnt = c.brush.extent();
-    var tx1 = (s=="m"?10090:9606);
-    var tx2 = (s=="m"?9606:10090);
-    var r;
-    var mmOverlapQuery = {
-      from: 'SequenceFeature',
-      select: [
-	'organism.shortName',
-	'primaryIdentifier',
-	'symbol',
-	'chromosomeLocation.locatedOn.primaryIdentifier',
-	'chromosomeLocation.start',
-	'chromosomeLocation.end',
-	'chromosomeLocation.strand'
-      ],
-      where : [],
-      sortOrder: [["organism.shortName", "ASC"], ["symbol","ASC"]]
-    };
-
-    // A
-    mmOverlapQuery.where.push(["primaryIdentifier", "is not null"]);
-
-    // (B and C)
-    mmOverlapQuery.where.push(["organism.taxonId", "=", tx1]);
-    r = fmtLoc(c.id, Math.floor(xtnt[0]), Math.floor(xtnt[1]));
-    mmOverlapQuery.where.push(["chromosomeLocation","OVERLAPS",[r]]);
-
-
-    var rs = [];
-    sblocks.forEach(function(b){
-	if(c.id == b[s+'chr'] && xtnt[0]<=b[s+'end'] && xtnt[1] >= b[s+'start']){
-	    rs.push( fmtLoc(b[s2+'chr'], Math.floor(b.map(xtnt[0])), Math.floor(b.map(xtnt[1]))) );
-	}
-    });
-    if(rs.length > 0){
-	// (D and E)
-	mmOverlapQuery.constraintLogic = "A and ((B and C) or (D and E))";
-	mmOverlapQuery.where.push(["organism.taxonId", "=", tx2]);
-	mmOverlapQuery.where.push(["chromosomeLocation", "OVERLAPS",rs]);
-    }
-
-    if(mmOverlapQuery){
-	console.log(mmOverlapQuery);
-	mousemine.rows(mmOverlapQuery).then(function(rows){ 
-	  var rs = d3.select('#genestbl').selectAll('tr').data(rows);
-	  rs.enter().append('tr');
-	  rs.exit().remove();
-	  var tds = rs.selectAll('td').data(function(d){return d;});
-	  tds.enter().append('td');
-	  tds.text(function(d){return d;});
-	});
-
-	window.currOverlapQuery = mmOverlapQuery;
-	d3.select('#bToMouseMine').attr('disabled',null);
-    }
-
-}
-
-function runOverlapQuery(){
-    var mmOverlapQuery = window.currOverlapQuery;
-    if(! mmOverlapQuery ) return;
-
-    /* Run the query and get back rows. Dump symbols to page. */
-    console.log(mmOverlapQuery);
-    // Turn query into a link to execute at MouseMine. Open in new page.
-    var q = new intermine.Query(mmOverlapQuery).toXML();
-    q=q.replace('query','query model="genomic" ');
-    q = mmRunQueryLink.replace('@@@@', encodeURIComponent(q));
-    window.open(q);
-}
-
-function clearBrushes(except){
-    window.currOverlapQuery = null;
-    d3.select('#bToMouseMine').attr('disabled',true);
-
-    d3.selectAll('.brush').each(function(c){
-	if(c.brush !== except){
-	    c.brush.clear();
-	    c.brush(d3.select(this));
-	}
-    });
-}
-
 function clearSelections(){
-    clearBrushes();
-    window.mselected = [];
-    window.hselected = [];
-    fadeEm(window.mselected, window.hselected);
+    aSelected = [];
+    bSelected = [];
+    fadeEm(aSelected, bSelected);
 }
 
 function flipGenome(){
-    clearBrushes();
     spIndex = 1-spIndex;
     redraw();
 }
 
 function flipColors(){
     cIndex = 1-cIndex;
-    var s2 = ["m","h"][cIndex];
+    var s2 = ["aChr","bChr"][cIndex];
     d3.selectAll('.sblock')
       .transition().duration(1000)
-      .attr('fill', function(d){ return colors(d[s2 + 'chr']); });
+      .attr('fill', function(d){ return colors(d[s2]); });
     setTitle( species[spIndex].species, species[cIndex].species );
 }
 
-window.mselected=[]; 
-window.hselected=[];
-
 function chrClicked(d){
-    var s = d.species[0].toLowerCase() + 'selected';
-    var i = window[s].indexOf(d.id);
+    let lst = d.species === aName ? aSelected : bSelected;
+    let i = lst.indexOf(d.id);
     if(i==-1)
-        window[s].push(d.id);
+        lst.push(d.id);
     else
-        window[s].splice(i,1);
-    fadeEm(window.mselected, window.hselected);
+        lst.splice(i,1);
+    fadeEm(aSelected, bSelected);
 }
 
-function fadeEm(mchrs, hchrs){
+function fadeEm(aChrs, bChrs){
     svg.selectAll('.sblock').classed('fade', function(d){
-	return (mchrs.length>0 && mchrs.indexOf(d.mchr) == -1) || (hchrs.length>0 && hchrs.indexOf(d.hchr) == -1);
+	return (aChrs.length>0 && aChrs.indexOf(d.aChr) == -1) || (bChrs.length>0 && bChrs.indexOf(d.bChr) == -1);
         });
 }
 
