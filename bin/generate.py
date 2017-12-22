@@ -1,12 +1,50 @@
 #
-# generate.py
-#
-# Given two sets of features, one from genome A and one from genome B,
-# and a file of a/b feature pairs defining corrospondence between features in A and B,
-# generates synteny blocks between genome A and genome B via interpolation.
-#
-# 
+'''
+generate.py
 
+Given two sets of features, one from genome A and one from genome B,
+and a file of a/b feature pairs defining corrospondence between features in A and B,
+generates synteny blocks between genome A and genome B via interpolation.
+
+Inputs: 3 files
+    1. A GFF3 file of features from genome A. We'll call this "A".
+    2. A GFF3 file of features from genome B. We'll call this "B".
+    3. A 2-column, tab delimited file of A/B ID pairs, which defines 
+       the correspondence between A and B features. We'll call this "AB".
+
+Outputs a tab-delimited file of inferred synteny blocks.
+Each row corresponds to one block, and has the following fields:
+    1. block id, integer
+    2. block count, number of AB pairs used to infer this block
+    3. block orientation, + or -
+    4. aChr: chromosome in A genome
+    5. aStart: start position on aChr
+    6. aEnd: end position on aChr
+    7. bChr: chromosome in b genome
+    8. bStart: start position on bChr
+    9. bEnd: end position on bChr
+
+Implementation outline:
+
+1. Filter AB to contain only 1:1 relationships.
+
+2. a. Filter file A for features whose ID appears in AB.
+   b. Sort by chr+start position.
+   c. Filter to remove any overlaps between features.
+   d. Number the features, 1, 2, 3...
+
+3. Repeat steps 2a-d, for file B.
+
+4. a. Join A-AB-B to obtain a table of feature pairs.
+   b. Project the needed columns:
+       aIndex, aID, aChr, aStart, aEnd, aStrand,
+       bIndex, bID, bChr, bStart, bEnd, bStrand
+
+5. Generate synteny blocks. The heart of the algorithm is here.
+   Given the output of step 4 (a file of corresponding pairs (a,b), separately numbered by position in each genome),
+   we sort the table by aIndex, then scan the results, looking for breaks in the sequece of bIndex values - these 
+   indicate synteny block boundaries. (Detail: also look for changes in aChr or bChr)
+'''
 import argparse
 import gff3
 import sys
