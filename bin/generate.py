@@ -159,7 +159,7 @@ class SyntenyBlockGenerator:
         """
         # a. Filter for features whose ID is in the index
         n = len(feats)
-        #feats[:] = filter(lambda f: f.ID in index, feats)
+        feats[:] = filter(lambda f: f.ID.startswith("MGI:") and f.ID in index, feats)
         dn_a = n - len(feats)
 
         # b. Sort by chr+start position.
@@ -172,6 +172,7 @@ class SyntenyBlockGenerator:
         feats.sort(gffSorter)
 
         # c. Filter to remove any overlaps between features.
+        # IS THIS IMPORTANT??
         def overlaps(a, b):
             return a.seqid == b.seqid and a.start <= b.end and a.end >= b.start
         #
@@ -186,21 +187,6 @@ class SyntenyBlockGenerator:
         feats[:] = nfs
         dn_c = n - len(feats)
         
-        ############################################################################
-        # TEMPORARY HACK: until sto589 in the mousemine backlog gets done.
-        # See: http://mgiprodwiki.jax.org:9180/kunagi/#project=b8be0a35-0ca5-41e1-8a5d-571757dc13cf-1/page=ProductBacklog/entity=sto589
-        # Hack: Assume any genes that have a "." strand are actually "+".
-        # REMEMBER TO REMOVE ME!
-        #
-        #for f in feats:
-        #    if f.strand == ".":
-        #        f.strand = "+"
-        # end HACK
-        #
-        # UPDATE: generated gff3 files by another means and so ducked the issue.
-        # The issue still exists tho. Leaving this here as a reminder.
-        ############################################################################
-
         # d. Number the features, 1, 2, 3... and project just the bits we need
         nfs = []
         for i,f in enumerate(feats) :

@@ -14,7 +14,7 @@
 This demo displays mouse/human synteny blocks against either the mouse or human genome, 
 and allows the user to switch back and forth between views, zoom, select regions, and get data from MouseMine. 
 See <a href="#instructions">instructions</a> at the bottom of this page. 
-THIS IS A PROTOTYPE! (See <a href="#disclaimer">disclaimer</a>.)
+THIS IS A PROTOTYPE! 
 <p>
 Genome A: <select id="aGenome"></select>
 Genome B: <select id="bGenome"></select>
@@ -87,31 +87,16 @@ Genome B: <select id="bGenome"></select>
 
 <a name="instructions"><h3>How to use this tool</h3></a>
 <ul>
-<li> To change which species' chromosomes are displayed, click the Genome button.  
-<li> To change which species' chromosomes are used to color the synteny blocks, click the Color button.
+<li> To change which genome's chromosomes are displayed, click the Genome button.  
+<li> To change which genome's chromosomes are used to color the synteny blocks, click the Color button.
 <li> To view the blocks for specific chromosomes, click on the chromosome'labels.
 <li> To see the details (coordinates) for a synteny block, hover over it near its right or left side (not near the center).
 <li> To zoom in, double-click on the background. You should click near, but not on, the blocks you wish to zoom in on. Scroll wheels and touch gestures should also work.
 <li> To pan, drag on the background.
 <li> To restore the initial view, click "Reset View".
-<li> To see what genes are in a region, position the cursor over the chromosome (the cursor will change into a crosshair) and drag up or down.  Your region is drawn as a semi-transparent gray box. You can slide this box up and down, and you can adjust either end. As you do so, MouseMine is queried for the genes in that region AS WELL AS the genes in the corresponding syntenic regions of the other species. These are simply displayed as plain text symbols, just as a proof of concept.
-<li> To actually go to MouseMine and get those genes, click the "To MouseMine" button. Opens in a new window.
+<li> To see the genes that were used to define the block, click on the block. This takes you to MGI. To create a list of this genes in MouseMine, alt-click on the block.
+
 </ul>
-
-<a name="disclaimer"><h3>Disclaimer</h3></a>
-
-<div class="disclaimer">
-This is a prototype, a proof of concept, a learning vehicle.
-The main focus was on teaching myself <a href="http://d3js.org/">d3.js</a>
-and <a href="https://github.com/intermine/imjs">im.js</a>.
-(D3 is a JavaScript library for creating dynamic visualizations, and im.js is
-a JavaScript client API for InterMine.)
-The actual tool happens to do something useful and even fun.
-But the code underneath (and here I'm referring to my code, not d3 or imjs) is the worst kind of horrible hackery.
-It is completely unmaintainable and nonextensible.
-You have been warned.
-</div>
-
 
 <script src="viewer.js"></script>
 

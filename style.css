@@ -49,6 +49,11 @@ button {
     font-size : 14px;
 }
 
+.brush .extent {
+    fill-opacity : 0.3;
+    stroke : none;
+    shape-rendering: crispEdges;
+}
 rect.sblock {
     cursor: pointer;
 }

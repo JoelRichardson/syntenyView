@@ -6,9 +6,16 @@ function download {
    strain=$1
    fname=$2
    url="${BASEURL}/${strain}/${fname}"
+   ofile="${strain}.gff3"
    echo ${strain}
    curl -R -z ${fname} -o ${fname} $url
-   gunzip -c "${fname}" | grep "gene" | grep "MGI:" | python "${DIR}/bin/prepStrainFile.py" > "${strain}.gff3"
+   gunzip -c "${fname}" \
+       | grep -v "^#" \
+       | grep -v "Parent=" \
+       | grep -v biological_region \
+       | grep -v chromosome \
+       | python "${DIR}/bin/prepStrainFile.py" \
+       > "${ofile}"
 }
 
 cd ${DIR}/data

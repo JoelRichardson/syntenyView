@@ -1,12 +1,21 @@
 var mmServer = "www.mousemine.org";
 
+//let mgiUrlBase = "http://www.informatics.jax.org/batch/summary";
+//let mmUrlBase  = "http://www.mousemine.org/mousemine/portal.do?class=Gene&externalids=";
 var mousemine   = new intermine.Service({root: mmServer+'/mousemine/service'});
 var margin = {top: 35, right: 10, bottom: 20, left: 30};
 var outerWidth = 800;
 var outerHeight = 400;
 var width = outerWidth - margin.left - margin.right;
 var height = outerHeight - margin.top - margin.bottom;
-var zoomer = d3.behavior.zoom().on("zoom", zoom);
+var zoomer = d3.behavior.zoom(); // .on("zoom", zoom); DISABLE
+var yscale = null;
+
+var species = []; // list of species data
+var spIndex = 0; // index of species for backbone
+var cIndex = 0; // index of species for coloring
+var colors=null; // color map
+
 var labels = null;
 
 var aName = null; // A genome name
@@ -209,8 +218,77 @@ function go () {
         allBlocks = bks;
         aSelected = [];
         bSelected = [];
+        species = [];
+        sp2chrs = {}
         processChrs( allChrs );
     });
+}
+
+function processChrs(data) { 
+    // data = Data for each chromosome in order by id
+    // (chrs from different species are interleaved)
+    //
+    // Data = list of: primaryIdentifier, length, organism.shortName
+    //
+    var sp, chr, len;
+    var s2chrs = {};
+    var spd, dd; // spd=species data, dd=data for 1 chr
+    var sx,sy;
+    var data2 = [];
+    var maxLen = 0; // for any chromosome of any species
+
+    species = [];
+    data.forEach(function(d){
+	sp = d[2];      // "species" name
+	chr = d[0];     // chromosome name
+	len = +d[1];    // chromosome length
+        // skip contigs
+	if(chr.length > 2) return;
+        //
+	spd = s2chrs[sp]; //species data object
+	if(!spd){
+	    spd = {
+		species : sp,
+		chrs : [],
+		maxLen : -1
+	        };
+            // make sure the aName species goes into pos 0 and bName species into 1.
+            species[ (sp === aName) ? 0 : 1 ] = spd;
+	    s2chrs[sp] = spd;
+	}
+	dd = {
+	    id : chr,
+	    length : len,
+	    scale : d3.scale.linear().domain([1,len]).range([0,height]),
+	    species : sp
+	    };
+	spd.chrs.push(dd);
+	spd.maxLen = Math.max(spd.maxLen, len);
+	maxLen = Math.max(maxLen, spd.maxLen); 
+    });
+    yscale = d3.scale.linear().domain([1,maxLen]).range([0,height]);
+    species.forEach(function(spd){
+	spd.xscale = d3.scale.ordinal()
+	  .domain(spd.chrs.map(function(x){return x.id;}))
+	  .rangePoints([0,width], 2);
+	spd.yscale = d3.scale.linear()
+	  .domain([1,spd.maxLen])
+	  .range([0,height]);
+	spd.cscale = d3.scale
+            .category20().domain(spd.chrs.map(function(x){return x.id;}));
+	spd.chrs.forEach(function(c){
+	    var sc = d3.scale.linear().domain([1,c.length]).range([0, yscale(c.length)]);
+            c.brush = d3.svg.brush().y(sc)
+               .on("brushstart",brushstart)
+               .on("brushend",brushend);
+	  });
+    });
+
+    colors = species[0].cscale;
+
+    d3.selectAll('a.sblock').remove();
+
+    redraw();
 }
 
 // ---------------------------------------------
@@ -239,72 +317,6 @@ function resetView(){
   drawBlocks();
 }
 
-function processChrs(data) { 
-    // data = Data for each chromosome in order by id
-    // (chrs from different species are interleaved)
-    //
-    // Data = list of: primaryIdentifier, length, organism.shortName
-    //
-    var sp, chr, len;
-    var species = [];
-    var s2chrs = {};
-    var spd, dd; // spd=species data, dd=data for 1 chr
-    var sx,sy;
-    var data2 = [];
-    var maxLen = 0; // for any chromosome of any species
-    data.forEach(function(d){
-	sp = d[2];
-	chr = d[0];
-	len = +d[1];
-	if(len < 100000) return; // skip contigs
-	spd = s2chrs[sp];
-	if(!spd){
-	    spd = {
-		species : sp,
-		chrs : [],
-		maxLen : -1
-	        };
-	    species.push(spd);
-	    s2chrs[sp] = spd;
-	}
-	dd = {
-	    id : chr,
-	    length : len,
-	    scale : d3.scale.linear().domain([1,len]).range([0,height]),
-	    species : sp
-	    };
-	spd.chrs.push(dd);
-	spd.maxLen = Math.max(spd.maxLen, len);
-	maxLen = Math.max(maxLen, spd.maxLen); 
-    });
-    window.yscale = d3.scale.linear().domain([1,maxLen]).range([0,height]);
-
-    window.species = []; // list of species data
-    window.spIndex = 0; // index of species for backbone
-    window.cIndex = 0; // index of species for coloring
-    window.colors=null; // color map
-
-    species.forEach(function(spd){
-	spd.xscale = d3.scale.ordinal()
-	  .domain(spd.chrs.map(function(x){return x.id;}))
-	  .rangePoints([0,width], 2);
-	spd.yscale = d3.scale.linear()
-	  .domain([1,spd.maxLen])
-	  .range([0,height]);
-	spd.cscale = d3.scale.category20c().domain(spd.chrs.map(function(x){return x.id;}));
-	spd.chrs.forEach(function(c){
-	    var sc = d3.scale.linear().domain([1,c.length]).range([0, window.yscale(c.length)]);
-	  });
-	window.species.push(spd);
-    });
-
-    window.colors = window.species[0].cscale;
-
-    d3.selectAll('a.sblock').remove();
-
-    redraw();
-}
-
 function setTitle(bspecies, cspecies) {
     // Species label
     //
@@ -322,8 +334,6 @@ function setTitle(bspecies, cspecies) {
 
 }
 
-let mgiUrlBase = "http://www.informatics.jax.org/batch/summary";
-let mmUrlBase  = "http://www.mousemine.org/mousemine/portal.do?class=Gene&externalids=";
 
 function blockClicked () {
     let alt = d3.event.altKey;
@@ -342,14 +352,14 @@ function blockClicked () {
 }
 
 function redraw () {
-    drawChrs( species[spIndex], species[cIndex], window.colors);
+    drawChrs( species[spIndex], species[cIndex], colors);
 }
 
 function drawBlocks(){
     let s= 'a';
     d3.selectAll('a.sblock rect')
         .attr("height", function(d){
-             return Math.max(minRectHeight/magnification, window.yscale(d[s+'End']-d[s+'Start']+1));
+             return Math.max(minRectHeight/magnification, yscale(d[s+'End']-d[s+'Start']+1));
         })
 }
 
@@ -357,6 +367,7 @@ function drawChrs(spd, spd2, colors){
     var ccells;
     var slabel = null;
     //var labels;
+    var brushes;
     var blks;
     var xf = function(d){return bwidth+spd.xscale(d.id);};
     var s,s2;
@@ -400,11 +411,12 @@ function drawChrs(spd, spd2, colors){
       .attr("x1", xf)
       .attr("y1", 0)
       .attr("x2", xf)
-      .attr("y2", function(d){return window.yscale(d.length);})
+      .attr("y2", function(d){return yscale(d.length);})
 	;
 
-    // Synteny blocks
+    // Synteny blocks -----------------------------
     //
+    // Block data
     s  = ["a","b"][spIndex];
     s2 = ["a","b"][cIndex];
     let blocksToDraw = allBlocks;
@@ -415,10 +427,11 @@ function drawChrs(spd, spd2, colors){
             return v;
         });
     }
-
-    //
     blks = svg.selectAll('a.sblock')
       .data(blocksToDraw, function(x){return x.name;});
+
+
+    // Block DOM structure
     blks.enter()
        .append('a')
        .attr('class','sblock')
@@ -429,28 +442,76 @@ function drawChrs(spd, spd2, colors){
            .append('title')    
 	   ;
 
+    //
     blks.exit().remove();
 
+    // Block tooltips
     blks.select('title').text(function(d,i){
-         return `A=${fmtLoc(d.aChr,d.aStart,d.aEnd)}(${formatLength(d.aLength)}) B=${fmtLoc(d.bChr,d.bStart,d.bEnd)}(${formatLength(d.bLength)})`;
+         return `A=${fmtLoc(d.aChr,d.aStart,d.aEnd)}(${formatLength(d.aLength)})`
+            +   ` B=${fmtLoc(d.bChr,d.bStart,d.bEnd)}(${formatLength(d.bLength)})`
+            +   `\n${d.ids.length} gene${d.ids.length > 1 ? 's':''}`
+            +   `\n${d.ids.slice(0,5).join(' ')}`
+            +   (d.ids.length > 5 ? "..." : "");
      })
+
+    // Transition effects
     blks.select('rect')
      .classed("inverted", x => x.ori == "-")
      .attr("fill", function(d){ return colors(d[s2+'Chr']); })
      .transition().duration(dur)
-     .attr("x", function(d){return spd.xscale(d[s+'Chr']) + (d.ori=="+"?bwidth:0);})
-     .attr("y", function(d){return window.yscale(d[s+'Start']);})
+     .attr("x", function(d){
+         let x = spd.xscale(d[s+'Chr']) + (d.ori=="+"?bwidth:0);
+         if (isNaN(x)) throw "Bad coordinate.";
+         return x;
+     })
+     .attr("y", function(d){return yscale(d[s+'Start']);})
      .attr("width",bwidth) 
      .attr("height", function(d){
-         return Math.max(minRectHeight/magnification, window.yscale(d[s+'End']-d[s+'Start']+1));
+         return Math.max(minRectHeight/magnification, yscale(d[s+'End']-d[s+'Start']+1));
      })
      ;
-    blks.each(function(d){
-     var s = spd.species === aName ? "a" : "b";
-     var s2= spd2.species === aName ? "a" : "b";
-     d.map.domain([d[s+'Start'],d[s+'End']]);
-     d.map.range(d.ori=='+'?[d[s2+'Start'],d[s2+'End']]:[d[s2+'End'],d[s2+'Start']]);
+
+     // Map functions
+     blks.each(function(d){
+       var s = spd.species === aName ? "a" : "b";
+       var s2= spd2.species === aName ? "a" : "b";
+       d.map.domain([d[s+'Start'],d[s+'End']]);
+       d.map.range(d.ori=='+'?[d[s2+'Start'],d[s2+'End']]:[d[s2+'End'],d[s2+'Start']]);
      });
+
+    // Brushes
+    brushes = svg.selectAll("g.brush").data(spd.chrs, function(x){return x.id;});
+    brushes.exit().remove();
+    brushes.enter().append('g').attr('class','brush')
+        .each(function(d){d3.select(this).call(d.brush);})
+	.selectAll('rect')
+	 .attr('width',10)
+	 .attr('x', cwidth/4)
+	 ;
+    brushes
+        .attr('transform', function(d){return 'translate('+spd.xscale(d.id)+')';})
+        .each(function(d){d3.select(this).call(d.brush);})
+	;
+}
+
+function brushstart(c){
+    clearBrushes(c.brush);
+    d3.event.sourceEvent.stopPropagation();
+}
+
+function brushend(c){
+    if(c.brush.empty()) return;
+    var xtnt = c.brush.extent();
+    console.log("Brush end.", c.id, xtnt)
+}
+
+function clearBrushes(except){
+    d3.selectAll('.brush').each(function(c){
+	if(c.brush !== except){
+	    c.brush.clear();
+	    c.brush(d3.select(this));
+	}
+    });
 }
 
 function fmtLoc(c,s,e){
@@ -460,12 +521,14 @@ function fmtLoc(c,s,e){
 }
 
 function clearSelections(){
+    clearBrushes();
     aSelected = [];
     bSelected = [];
     fadeEm(aSelected, bSelected);
 }
 
 function flipGenome(){
+    clearBrushes();
     spIndex = 1-spIndex;
     redraw();
 }
